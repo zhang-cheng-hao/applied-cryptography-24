@@ -219,33 +219,60 @@ class ModbusTcpClient(BaseModbusClient):
                 source_address=self.source_address)
             _logger.debug("Connection to Modbus server established. "
                           "Socket {}".format(self.socket.getsockname()))
-            # authorization
-            R1_int = random.randrange(100000)
-            # R1 = random.randbytes(8)
-            R1 = R1_int.to_bytes(8, "little", signed=False)
-            # print("R1:", R1)
-            cpr = sm2.CryptSM2(public_key=self.framer.trusted_public_key)
-            R1_encode = cpr.encrypt(R1)
-            self.socket.send(R1_encode)
-
-            R1R2_bytes = self.socket.recv(1024)
-            # print("R1R2_bytes:", R1R2_bytes)
-            # print("len(R2R1_bytes):", len(R1R2_bytes))
-            R1_get = R1R2_bytes[:8]
-            if R1_get != R1:
-                self.socket.send(b'Permission denied')
-                self.close()
-                return False
-            R2_encode = R1R2_bytes[8:]
-            # print("R1_get:", R1_get)
-            # print("len(R1_get):", len(R1_get))
-            # print("R2_encode:", R2_encode)
-            # print("len(R2_encode):", len(R2_encode))
-
-            R2 = self.framer.crypter.decrypt(R2_encode)
-            # print("R2:", R2)
-            # print("len(R2):", len(R2))
-            self.socket.send(R2)
+            # 身份验证
+            
+            try:
+                # # 生成安全随机数R1
+                # R1 = secrets.token_bytes(8)  # 8字节的随机数
+                start_time = time.time()
+                R1_int = random.randrange(100000)
+                # R1 = random.randbytes(8)
+                R1 = R1_int.to_bytes(8, "little", signed=False)
+                # 使用服务器的公钥加密R1
+                cpr = sm2.CryptSM2(public_key=self.framer.trusted_public_key)
+                R1_encode = cpr.encrypt(R1)
+                
+                # 发送加密的R1给服务器
+                self.socket.send(R1_encode)
+                _logger.debug("Sent encrypted R1 to server")
+                
+                # 接收服务器返回的R1和R2
+                R1R2_bytes = self.socket.recv(1024)
+                if len(R1R2_bytes) < 16:  # 假设R1和R2各8字节
+                    _logger.warning("Received incomplete R1R2_bytes from server")
+                    self.socket.send(b'Permission denied')
+                    self.close()
+                    return False
+                
+                R1_get = R1R2_bytes[:8]
+                R2_encode = R1R2_bytes[8:]
+                
+                # 验证R1
+                if R1_get != R1:
+                    _logger.warning("R1 verification failed: expected %s, got %s",
+                                    R1.hex(), R1_get.hex())
+                    self.socket.send(b'Permission denied')
+                    self.close()
+                    return False
+                _logger.debug("R1 verification passed")
+                
+                # 解密R2
+                R2 = self.framer.crypter.decrypt(R2_encode)
+                if not R2:
+                    _logger.warning("Failed to decrypt R2 from server")
+                    self.socket.send(b'Permission denied')
+                    self.close()
+                    return False
+                else:
+                    print("Client verification successful!")
+                _logger.debug("Decrypted R2 from server")
+                # 发送R2回服务器以完成认证
+                self.socket.send(R2)
+                end_time = time.time() 
+                elapsed_time = end_time - start_time
+                print(f"Elapsed time: {elapsed_time:.2f} seconds")
+                _logger.info("Authentication successful")
+                return True
 
             print("----------- 密钥协商开始 ---------------------------------------------------")
             time1 = time.time()
