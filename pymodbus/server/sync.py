@@ -185,31 +185,55 @@ class ModbusConnectedRequestHandler(ModbusBaseRequestHandler):
         request handler class.
 
         """
-        # Authorization
-        R1_get = self.request.recv(1024)
+        # 身份验证
+        try:
+            R1_get = self.request.recv(1024)
+            if not R1_get:
+                _logger.warning("Received empty R1_get from client")
+                self.request.send(b'Permission denied')
+                return
 
-        # print("R1_get: ", R1_get)
-        # print("len(R1_get): ", len(R1_get))
-        R1 = self.framer.crypter.decrypt(R1_get)
-        # print("R1:", R1)
-        # print("len(R1):", len(R1))
-        R2_int = random.randrange(100000)
-        # R2 = random.randbytes(8)
-        R2 = R2_int.to_bytes(8, "little", signed=False)
-        # print("R2: ", R2)
-        cpr = sm2.CryptSM2(public_key=self.framer.trusted_public_key)
-        R2_encode = cpr.encrypt(R2)
-        R1R2 = R1 + R2_encode
-        # print("R1R2: ", R1R2)
-        # print("len(R1R2): ", len(R1R2))
-        self.request.send(R1R2)
+            R1 = self.framer.crypter.decrypt(R1_get)
+            if not R1:
+                _logger.warning("Failed to decrypt R1_get")
+                self.request.send(b'Permission denied')
+                return
 
-        R2_get = self.request.recv(1024)
-        if R2_get != R2:
+            # 生成安全随机数R2
+            # R2 = secrets.token_bytes(8)
+            R2_int = random.randrange(100000)
+            # R2 = random.randbytes(8)
+            R2 = R2_int.to_bytes(8, "little", signed=False)
+
+            # 使用客户端的公钥加密R2
+            cpr = sm2.CryptSM2(public_key=self.framer.trusted_public_key)
+            R2_encode = cpr.encrypt(R2)
+
+            # 发送R1和加密后的R2给客户端
+            self.request.send(R1 + R2_encode)
+
+            # 接收客户端发送回的R2
+            R2_get = self.request.recv(1024)
+            if not R2_get:
+                _logger.warning("Received empty R2_get from client")
+                self.request.send(b'Permission denied')
+                return
+
+            if R2_get != R2:
+                _logger.warning("R2 verification failed: expected %s, got %s",
+                                R2.hex(), R2_get.hex())
+                self.request.send(b'Permission denied')
+                return
+            else:
+                print("Server verification successful!")
+
+            _logger.info("Client authentication successful")
+
+        except Exception as ex:
+            _logger.error("Authentication error: %s", ex)
             self.request.send(b'Permission denied')
+            self.framer.resetFrame()
             return
-        # print("R2_get: ", R2_get)
-        # print("len(R2_get): ", len(R2_get))
 
         # 服务端处理部分
         print("----------- 密钥协商开始 ---------------------------------------------------")
