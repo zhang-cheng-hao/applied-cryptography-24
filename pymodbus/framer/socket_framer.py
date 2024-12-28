@@ -186,18 +186,34 @@ class ModbusSocketFramer(ModbusFramer):
 
         # 使用公钥验证签名
         if self.trusted_public_key:
+            # 签名部分
             sign = data[-64:].hex()
+            # 数据部分
             data = data[:-64]
+            # data_list = list(data)
+            # data_list[-1] += 1
+            # data = bytes(data_list)
+            print(f"【接收】收到的数据签名：{sign}\n")
+            print(f"【接收】收到的消息的 功能码+数据：{hexlify_packets(data)}\n")  
+            t1 = time.perf_counter()          
             verify_res = sm2.CryptSM2(private_key=None, public_key=self.trusted_public_key).verify_with_sm3(sign, data)
             if not verify_res:
+                print('Unverified message!')
                 raise InvalidMessageReceivedException('Unverified message')
+            t2 = time.perf_counter() - t1
+            print(f"【接收】摘要+验证耗时: {t2:.6f} s\n")
+            print(f"【接收】收到消息且验证成功")
 
         self.crypt_sm4.set_key(self.sm4_key.encode('utf-8'), SM4_DECRYPT)
         value = data[1:]
         value = self.crypt_sm4.crypt_cbc(Defaults.iv, value)
         data = data[0].to_bytes(1, 'big') + value
-
+        t1  = time.perf_counter()
         result = self.decoder.decode(data)
+        t2  = time.perf_counter() - t1
+        print(f"【接收】解密后数据: {result}\n")
+        print(f"【接收】解密后数据utf-8格式: {hexlify_packets(value)}\n")
+        print(f"【接收】消息解密耗时: {t2:.6f} s\n")
 
         if result is None:
             raise ModbusIOException("Unable to decode request")
@@ -250,8 +266,13 @@ class ModbusSocketFramer(ModbusFramer):
 
         # 加入数字签名
         if self.crypter:
-            sign = self.crypter.sign_with_sm3(packed_data[len(packet) - 1:])
+            t1 = time.perf_counter()
+            sign = self.crypter.sign_with_sm3(packed_data[len(packet) - 1:]) # 摘要+签名
+            print(f"【发送】功能码+数据 摘要的签名：{sign}\n")
+            print("【发送】将签名加入帧的尾部\n")
             packed_data += bytes.fromhex(sign)
+            t2 = time.perf_counter() - t1
+            print(f"【发送】摘要+签名耗时: {t2:.6f} s\n")
 
         return packed_data
 
