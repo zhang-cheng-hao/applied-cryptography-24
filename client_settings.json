@@ -1,0 +1,10 @@
+{
+    "private_key": "d867a6656da896eabc93642b4bc1da7761359c21c3d5b1aa885707994a7d0002",
+    "public_key": "e0e4f48c11a282980111c4d3410d4b20a859b58f06bcd4aa644aac9594b77b2792555e6270847453f74f195e2d968e40db68ac509ed2adca79183385ab95d365",
+    "sm4_key": "3l5butlj26hvv313",
+    "known_host" : [
+        {
+            "public_key": "cbe9b3cb0a36969499380e26a55c2ad6c1c192805d3ddeedbced4e65c7c2f5735b469b7244454212ac7f49bbd35e304210c958b10c1ee722a18920c380ab97e6"
+        }
+    ]
+}
