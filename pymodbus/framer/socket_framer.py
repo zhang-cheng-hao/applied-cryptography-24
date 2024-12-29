@@ -206,8 +206,22 @@ class ModbusSocketFramer(ModbusFramer):
 
         self.crypt_sm4.set_key(self.sm4_key.encode('utf-8'), SM4_DECRYPT)
         value = data[1:]
+
+        print(f"[接收] SM4解密前数据: {hexlify_packets(value)}") #打印接收到的数据
+        start_time = time.perf_counter()
+        value = self.crypt_sm4.crypt_cbc(Defaults.iv, value) #解密数据
+        end_time = time.perf_counter()
+        # 计算运行时间，并打印
+        elapsed_time = (end_time - start_time) * 1000  # 转换为毫秒
+        print(f"[接收] SM4解密时间: {elapsed_time:.4f}ms")
+
         value = self.crypt_sm4.crypt_cbc(Defaults.iv, value)
         data = data[0].to_bytes(1, 'big') + value
+
+        print(f"[接收] SM4解密后数据: {hexlify_packets(value)}") #打印接收到的数据
+        result = self.decoder.decode(data)
+        print(f"[接收] 解码后数据: {result}") #打印解码后的数据
+
         t1  = time.perf_counter()
         result = self.decoder.decode(data)
         t2  = time.perf_counter() - t1
@@ -247,10 +261,17 @@ class ModbusSocketFramer(ModbusFramer):
 
         :param message: The populated request/response to send
         """
+        print(f"[发送] 编码前数据: {message}") #打印发送的数据
+        print(f"[发送] 编码后数据: {hexlify_packets(data)}") #打印发送的数据
         data = message.encode()
-
         self.crypt_sm4.set_key(self.sm4_key.encode('utf-8'), SM4_ENCRYPT)
+        start_time = time.perf_counter()
         data = self.crypt_sm4.crypt_cbc(Defaults.iv, data)
+        end_time = time.perf_counter()
+        # 计算运行时间，并打印
+        elapsed_time = (end_time - start_time) * 1000  # 转换为毫秒
+        print(f"[发送] SM4加密时间: {elapsed_time:.4f}ms")
+        print(f"[发送] SM4加密后数据: {hexlify_packets(data)}") #打印发送的数据
 
         len_sign = 0
         if self.crypter:
@@ -273,6 +294,9 @@ class ModbusSocketFramer(ModbusFramer):
             packed_data += bytes.fromhex(sign)
             t2 = time.perf_counter() - t1
             print(f"【发送】摘要+签名耗时: {t2:.6f} s\n")
+
+
+
 
         return packed_data
 
